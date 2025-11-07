@@ -4,6 +4,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any
 
 import boto3
 from aws_lambda_powertools.utilities.data_classes import APIGatewayProxyEventV2
@@ -15,13 +16,14 @@ from builder import PromptBuilder
 # -------------------------
 # Configuration
 # -------------------------
+
+API_KEY_HEADER = os.environ.get("api_key_header", "X-API-Key")
 MCP_ENDPOINT = os.environ.get("mcp_endpoint", "https://localhost:8080")
 LLM_MODEL = os.environ.get("llm_model", "us.amazon.nova-lite-v1:0")
 
 # -------------------------
 # Define MCP model entities
 # -------------------------
-
 
 @dataclass
 class MemoryRequest:
@@ -34,18 +36,16 @@ class MemoryRequest:
     arguments: dict
 
 # -------------------------
-# Initialize MCP server and AWS clients
+# Initialize MCP and AWS clients
 # -------------------------
 
 bedrock = boto3.client("bedrock-runtime")
 mcp_factory = lambda x_api_key: Client(
-    init_timeout=timedelta(minutes=5),
-    timeout=timedelta(minutes=5),
+    init_timeout=timedelta(seconds=30),
+    timeout=timedelta(seconds=30),
     transport=StreamableHttpTransport(
+        headers={API_KEY_HEADER: x_api_key},
         url=MCP_ENDPOINT,
-        headers={
-            "X-API-Key": x_api_key
-        }
     )
 )
 
@@ -53,25 +53,25 @@ mcp_factory = lambda x_api_key: Client(
 # Lambda handler
 # -----------------------
 
-def handler(event, context):
+def handler(event, context) -> dict[str, Any]:
     """
-     Demo implementation of a Bedrock agent capable of taking notes on behalf of the caller.
-     @param event: The event data that triggered the Lambda function. This is a dictionary containing request parameters, payload, or other triggering information.
-     @param context: Runtime information provided by AWS Lambda. Contains methods and properties like function name, memory limit, request ID, and remaining execution time.
-     @return: The response from the Lambda function. Typically a dictionary, string, or other serializable object that represents the function's result.
+    Demo implementation of a Bedrock agent capable of taking notes on behalf of the caller.
+    @param event: The event data that triggered the Lambda function. This is a dictionary containing request parameters, payload, or other triggering information.
+    @param context: Runtime information provided by AWS Lambda. Contains methods and properties like function name, memory limit, request ID, and remaining execution time.
+    @return: The response from the Lambda function. Typically a dictionary, string, or other serializable object that represents the function's result.
     """
     logging.info("Agent triggered for %s", event)
     return asyncio.run(handle(event, context))
 
-async def handle(event, context):
+async def handle(event, context) -> dict[str, Any]:
     """
-     synchronous event handler enabling the use of asyncio-based FastMCP library constructs.
-     @param event: The event data that triggered the Lambda function. This is a dictionary containing request parameters, payload, or other triggering information.
-     @param context: Runtime information provided by AWS Lambda. Contains methods and properties like function name, memory limit, request ID, and remaining execution time.
-     @return: The response from the Lambda function. Typically a dictionary, string, or other serializable object that represents the function's result.
+    synchronous event handler enabling the use of asyncio-based FastMCP library constructs.
+    @param event: The event data that triggered the Lambda function. This is a dictionary containing request parameters, payload, or other triggering information.
+    @param context: Runtime information provided by AWS Lambda. Contains methods and properties like function name, memory limit, request ID, and remaining execution time.
+    @return: The response from the Lambda function. Typically a dictionary, string, or other serializable object that represents the function's result.
     """
     api_event = APIGatewayProxyEventV2(event)
-    api_key = api_event.headers.get('X-API-Key')
+    api_key = api_event.headers.get(API_KEY_HEADER)
     async with mcp_factory(api_key) as mcp_client:
 
         # create prompts for LLM to decide on MCP server usage

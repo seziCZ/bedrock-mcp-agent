@@ -1,54 +1,46 @@
-# Agent & MCP Server
+# Serverless Bedrock Agent with MCP Context
 
-## Overview
+This project demonstrates a fully serverless architecture for a Bedrock-based LLM agent, where MCP servers handle the agent’s memory and context management. The architecture allows the agent to dynamically decide whether to store new information or recall relevant past memories to generate context-aware responses. It leverages AWS Bedrock models for language understanding and embeddings, S3 Vector tables for storing and querying semantic memory, and containerized AWS Lambda functions to host both the agent and MCP servers. The entire infrastructure is orchestrated using Python CDK.
 
-This project implements an **LLM-powered agent** integrated with a **Memory Control Protocol (MCP) server** to manage long-term memory. The MCP server enables the agent to:
+---
 
-- **Store** notable, user-specific, non-generic information.
-- **Recall** contextual information relevant to a user’s query.
-- Ensure memory is **impersonal, passive, and structured** for efficient retrieval.
-- Maintain **strict JSON outputs** for integration with other systems.
+## Key Concept
 
-The agent leverages MCP memory to provide more personalized and contextually aware responses over time.
+- **Serverless Agent**: Lambda-based agent queries Bedrock LLMs for responses.  
+- **Lambda-Hosted MCP**: MCP server runs entirely on AWS Lambda, managing long-term memory and embeddings. No dedicated servers required.  
+- **S3 Vector Store**: Persists embeddings for semantic memory and context-aware responses.  
+- **Authentication**: Both Agent and Server API Gateway endpoints are secured via **API key** in the `X-API-Key` header.  
 
 ---
 
 ## Architecture
+    
+      ┌────────────┐
+      │  User/API  │
+      └─────┬──────┘
+            │
+            ▼
+    ┌───────────────┐
+    │  Agent Lambda │
+    │  (Bedrock)    │
+    └─────┬─────────┘
+          │ invokes tools
+          ▼
+    ┌───────────────┐
+    │ Server Lambda │
+    │  (Memory MCP) │
+    └─────┬─────────┘
+          │ stores/queries
+          ▼
+     ┌───────────┐
+     │ S3 Vectors│
+     └───────────┘
 
-+------------------+ +-------------------+
-| | | |
-| LLM Agent | <----> | MCP Server |
-| | | |
-+------------------+ +-------------------+
-^
-|
 
 **Flow:**
 
-1. The agent receives a user message.
-2. The MCP server analyzes the message to determine:
-   - Should the content be **stored** in memory? (`memory.store`)
-   - Should a **recall** request be made for relevant stored information? (`memory.recall`)
-3. MCP server returns a **strict JSON array** of memory tool calls.
-4. The agent uses this information to generate contextually relevant responses.
+- **Agent Lambda**: Receives API requests, constructs prompts, and interacts with the MCP server to decide on memory usage.
+- **Server Lambda**: Handles `memory.store` and `memory.recall` tools, backed by an S3 Vector store for embeddings.
 
 ---
 
-## Features
-
-- **Personalized Memory Management**
-  - Stores notable user-specific info in **impersonal, passive form**.
-  - Recalls previously stored memory only when **directly relevant**.
-  
-- **Strict JSON Interface**
-  - All tool calls (`memory.store`, `memory.recall`) are returned in a **parseable JSON array**.
-  - For general knowledge or trivial queries, returns `[]`.
-
-- **Broad-Context Recall**
-  - When recalling, the MCP server generates **generic context phrases** to ensure all relevant memory can be retrieved, even if the exact value is unknown.
-
-- **Privacy-Compliant**
-  - Memory is stored **only with user consent**.
-  - General knowledge and widely-known facts are never stored.
-
----

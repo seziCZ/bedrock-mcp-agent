@@ -13,12 +13,12 @@ class PromptBuilder:
     """
 
     def __init__(
-            self,
-            max_tokens: int = 500,
-            top_p: float = 0.9,
-            top_k: int = 20,
-            temperature: float = 0.7,
-            prompts: list[PromptMessage] | None = None,
+        self,
+        max_tokens: int = 500,
+        top_p: float = 0.9,
+        top_k: int = 20,
+        temperature: float = 0.7,
+        prompts: list[PromptMessage] | None = None,
     ):
         """
         Initialize a new PromptBuilder instance.
@@ -39,7 +39,6 @@ class PromptBuilder:
     def add_prompt(self, role: str, text: str) -> Self:
         """
         Add a new prompt message to the builder.
-
         :param role: The role of the message (e.g., "user", "assistant", "system").
         :param text: The text content of the message.
         :return: The builder instance (for method chaining).
@@ -97,8 +96,8 @@ class PromptBuilder:
                         solely on that prompt, including any previously stored or recalled contextual information 
                         **only if it is directly relevant** to the current query. Do not introduce unrelated facts, 
                         stories, or examples from memory, and avoid adding general knowledge or commentary unless it is 
-                        necessary to answer the user’s specific request. All references to stored memory should be used
-                         strictly to enrich the response in a way that is pertinent and helpful to the current message.
+                        necessary to answer the user’s specific request. All references to stored memory should be used 
+                        strictly to enrich the response in a way that is pertinent and helpful to the current message.
                     """)
                 }
             ],

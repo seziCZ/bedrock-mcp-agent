@@ -1,5 +1,5 @@
-# Use AWS Lambda Python 3.11 base image
-FROM public.ecr.aws/lambda/python:3.11
+# Use AWS Lambda Python 3.12 base image
+FROM public.ecr.aws/lambda/python:3.12
 
 # Copy server relevant assets
 COPY . .

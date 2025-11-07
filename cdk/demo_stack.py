@@ -14,14 +14,19 @@ class DemoStack(Stack):
     LLM_MODEL = "us.amazon.nova-lite-v1:0"
     EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+    def __init__(
+            self,
+            scope: Construct,
+            id: str,
+            **kwargs
+    ) -> None:
         """
         Initializes the stack and defines the AWS resources within it.
         :param scope: The scope in which this construct is defined (usually the app or parent stack).
-        :param construct_id: The unique identifier for this construct within the scope.
+        :param id: The unique identifier for this construct within the scope.
         :param kwargs: Additional keyword arguments passed to the base Stack class.
         """
-        super().__init__(scope, construct_id, **kwargs)
+        super().__init__(scope, id, **kwargs)
 
         # create bucket for embeddings
         memory_bucket = S3VectorBucket(

@@ -13,7 +13,8 @@ from mcp.types import PromptMessage, TextContent
 
 # -------------------------
 # Configuration
-# -------------------------s
+# -------------------------
+
 SERVERLESS = os.environ.get("serverless_deployment", True)
 EMBEDDING_MODEL = os.environ.get("embedding_model", "amazon.titan-embed-text-v2:0")
 VECTOR_BUCKET_NAME = os.environ.get("vector_bucket_name", "test-s3-vector-bucket")
@@ -22,10 +23,11 @@ VECTOR_INDEX_NAME = os.environ.get("vector_index_name", "memories")
 # -------------------------
 # Initialize MCP server
 # -------------------------
+
 mcp = None
 if SERVERLESS:
     from mcp_server.mcp_handler import MCPLambdaHandler
-    mcp = MCPLambdaHandler("Lambda MCP Server")
+    mcp = MCPLambdaHandler("AWS Lambda MCP Server")
 
 else:
     from fastmcp import FastMCP
@@ -51,9 +53,9 @@ class Memory:
 # -------------------------
 # Initialize AWS clients
 # -------------------------
+
 bedrock = boto3.client("bedrock-runtime")
 s3_vectors = boto3.client("s3vectors")
-
 
 # -------------------------
 # Define MCP tools
@@ -157,6 +159,7 @@ def memory_recall(
 # -------------------------
 # Define MCP prompts
 # -------------------------
+
 @mcp.prompt(
     name="memory.decide",
     description="Generates prompts to help the LLM decide whether to store a new memory or recall an existing one based on context."

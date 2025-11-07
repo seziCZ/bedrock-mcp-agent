@@ -83,9 +83,12 @@ class RestApi(Construct):
         self.function = aws_lambda.DockerImageFunction(
             scope=self,
             id=f"{id}Lambda",
-            code=aws_lambda.DockerImageCode.from_image_asset(directory=directory),
+            retry_attempts=0,
+            code=aws_lambda.DockerImageCode.from_image_asset(
+                directory=directory
+            ),
             memory_size=512,
-            timeout=Duration.seconds(300),
+            timeout=Duration.seconds(30),
             environment=env or {},
         )
 

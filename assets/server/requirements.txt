@@ -1,0 +1,4 @@
+boto3==1.40.59
+fastmcp==2.13.0.2
+mcp==1.19.0
+aws-lambda-powertools==3.22.0

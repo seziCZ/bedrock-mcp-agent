@@ -117,9 +117,9 @@ def _parse_llm_response(llm_response: dict) -> str:
 
 def _parse_llm_request(llm_request: dict) -> list[MemoryRequest]:
     """
-    Converts an LLM response into a NoteRequest object for MCP execution.
+    Converts an LLM response into a MemoryRequest object for MCP execution.
     :param llm_request: The raw request dictionary returned by the LLM.
-    :return: A NoteRequest object with 'tool' and 'arguments' fields, or None if no tool is selected.
+    :return: A MemoryRequest object with 'tool' and 'arguments' fields, or None if no tool is selected.
     """
     str_response = _parse_llm_response(llm_request)
     mcp_request_json = json.loads(str_response)

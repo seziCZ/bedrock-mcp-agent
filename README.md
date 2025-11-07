@@ -44,3 +44,20 @@ This project demonstrates a fully serverless architecture for a Bedrock-based LL
 
 ---
 
+# Useful Commands
+
+```bash
+aws s3vectors list-vectors --vector-bucket-name <bucket> --index-name memories --return-metadata
+aws s3vectors delete-vectors --vector-bucket-name <bucket> --index-name my-index --keys <key>
+aws apigateway get-api-keys --include-values
+```
+
+# References
+
+- [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/python-image.html) – Serverless compute service  
+- [AWS Bedrock](https://aws.amazon.com/bedrock/) – Foundation models for language understanding  
+- [AWS S3 Vectors](https://aws.amazon.com/s3/features/vectors/) – Object storage for vector embeddings  
+- [AWS CDK](https://aws.amazon.com/cdk/) – Infrastructure as code  
+- [API Gateway](https://aws.amazon.com/api-gateway/) – Secure API endpoints 
+- [Serverless MCP](https://github.com/awslabs/mcp/tree/main/src/mcp-lambda-handler) - Inspiration for Lambda MCP server implementation
+- [Serverless MCP Options](https://github.com/awslabs/run-model-context-protocol-servers-with-aws-lambda) - Options regarding MCP serverless deployments

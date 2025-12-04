@@ -15,7 +15,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 
 API_KEY_HEADER = os.environ.get("api_key_header", "X-API-Key")
 MCP_ENDPOINT = os.environ.get("mcp_endpoint", "https://localhost:8080")
-LLM_MODEL = os.environ.get("llm_model", "us.amazon.nova-lite-v1:0")
+LLM_MODEL = os.environ.get("llm_model", "global.amazon.nova-2-lite-v1:0")
 
 # -------------------------
 # Initialize AWS Bedrock client

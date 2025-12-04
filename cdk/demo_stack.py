@@ -11,7 +11,7 @@ class DemoStack(Stack):
     invoking the agent, as well as all necessary resources to support the MCP memory management server.
     """
 
-    LLM_MODEL = "us.amazon.nova-lite-v1:0"
+    LLM_MODEL = "global.amazon.nova-2-lite-v1:0"
     EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
 
     def __init__(

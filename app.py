@@ -16,10 +16,6 @@ app = cdk.App()
 DemoStack(
     scope=app,
     id="DemoStack",
-    env=cdk.Environment(
-        account=os.getenv("CDK_DEFAULT_ACCOUNT"),
-        region="us-east-1"  # only region with S3 vectors
-    ),
 )
 
 # synthesize CF template

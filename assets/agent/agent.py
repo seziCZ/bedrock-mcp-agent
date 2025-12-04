@@ -88,6 +88,7 @@ async def handle(event, context) -> dict[str, Any]:
 def _get_mcp_client(x_api_key: str) -> MultiServerMCPClient:
     """
     Yields and configures a MultiServerMCPClient, authenticated using the given API key.
+    See https://pypi.org/project/langchain-mcp-adapters/ for technical details
     :param x_api_key: The API key to be used when authetnticating against the MCP server
     :return: An initialized MultiServerMCPClient instance.
     """

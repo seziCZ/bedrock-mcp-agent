@@ -1,11 +1,10 @@
 import hashlib
 from typing import Dict
 
-from constructs import Construct
-
 import cdk_s3_vectors as s3_vectors
 from aws_cdk import Duration, aws_lambda, aws_apigateway
 from aws_cdk.aws_apigateway import ApiKey, MethodOptions
+from constructs import Construct
 
 
 class S3VectorBucket(Construct):

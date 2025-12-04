@@ -16,6 +16,7 @@ from fastmcp.tools.tool import ToolResult
 
 SERVERLESS = os.environ.get("serverless_deployment", True)
 EMBEDDING_MODEL = os.environ.get("embedding_model", "amazon.titan-embed-text-v2:0")
+
 VECTOR_BUCKET_NAME = os.environ.get("vector_bucket_name", "test-s3-vector-bucket")
 VECTOR_INDEX_NAME = os.environ.get("vector_index_name", "memories")
 

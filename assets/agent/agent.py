@@ -8,6 +8,7 @@ from langchain.agents import create_agent
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import HumanMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.sessions import Connection, StreamableHttpConnection
 
 # -------------------------
 # Configuration
@@ -15,7 +16,10 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 
 API_KEY_HEADER = os.environ.get("api_key_header", "X-API-Key")
 MCP_ENDPOINT = os.environ.get("mcp_endpoint", "https://localhost:8080")
+
 LLM_MODEL = os.environ.get("llm_model", "global.amazon.nova-2-lite-v1:0")
+LLM_MODEL_TEMPERATURE = os.environ.get("llm_model_temperature", 0.2)
+LLM_MODEL_TOKENS = os.environ.get("llm_model_max_tokens", 512)
 
 # -------------------------
 # Initialize AWS Bedrock client
@@ -23,9 +27,8 @@ LLM_MODEL = os.environ.get("llm_model", "global.amazon.nova-2-lite-v1:0")
 
 llm = ChatBedrockConverse(
     model=LLM_MODEL,
-    temperature=0.2,
-    top_p=0.9,
-    max_tokens=512
+    temperature=LLM_MODEL_TEMPERATURE,
+    max_tokens=LLM_MODEL_TOKENS
 )
 
 # -----------------------
@@ -63,7 +66,8 @@ async def handle(event, context) -> dict[str, Any]:
     mcp_client = _get_mcp_client(api_key)
     mcp_tools = await mcp_client.get_tools()
 
-    # create a LangChain agent backed by Bedrock and MCP tools
+    # create a LangChain agent powered by Bedrock and MCP tools
+    # TODO: consider persisting conversation history using the ledger
     graph = create_agent(
         model=llm,
         tools=mcp_tools,
@@ -92,12 +96,14 @@ def _get_mcp_client(x_api_key: str) -> MultiServerMCPClient:
     :param x_api_key: The API key to be used when authetnticating against the MCP server
     :return: An initialized MultiServerMCPClient instance.
     """
+    connection: StreamableHttpConnection = {
+        "transport": "streamable_http",
+        "url": MCP_ENDPOINT,
+        "headers": {
+            API_KEY_HEADER: x_api_key,
+        },
+    }
+
     return MultiServerMCPClient({
-        "mcp_server": {
-            "transport": "streamable_http",
-            "url": MCP_ENDPOINT,
-            "headers": {
-                API_KEY_HEADER: x_api_key,
-            },
-        }
+        "mcp_server": connection
     })

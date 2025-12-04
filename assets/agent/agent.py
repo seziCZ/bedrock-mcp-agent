@@ -70,17 +70,16 @@ async def handle(event, context) -> dict[str, Any]:
         debug=True
     )
 
-    # build the message list for the agent.
-    prompts = {
+    # invoke the agent with the user provided input
+    responses = await graph.ainvoke({
         "messages": [
             HumanMessage(
                 content=api_event.body
             )
         ]
-    }
+    })
 
-    # run the agent and return the last message as the HTTP response body.
-    responses = await graph.ainvoke(prompts)
+    # return the last message as the HTTP response body.
     return {
         "statusCode": 200,
         "body": responses["messages"][-1].content

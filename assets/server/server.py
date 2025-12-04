@@ -9,7 +9,6 @@ from typing import Annotated
 
 import boto3
 from fastmcp.tools.tool import ToolResult
-from mcp.types import PromptMessage, TextContent
 
 # -------------------------
 # Configuration
@@ -38,13 +37,14 @@ else:
 # -------------------------
 
 @dataclass
-class Memory:
+class Note:
     """
-    Representation of a literal model's memory.
-    :param content: The content of the memory.
-    :param created: The timestamp when the memory was evoked.
-    :param distance: Cosine distance of this memory to a reference vector,
-        ranging from 0 (identical) to 1 (completely dissimilar). Defaults to 0.
+    Represents a single entry in the user's notebook.
+    :param content: The textual content of the note.
+    :param created: Timestamp indicating when the note was created.
+    :param distance: Cosine distance from a reference vector, where
+        0 indicates identical similarity and 1 indicates complete dissimilarity.
+        Defaults to 0.
     """
     content: str
     created: datetime
@@ -62,21 +62,34 @@ s3_vectors = boto3.client("s3vectors")
 # -------------------------
 
 @mcp.tool(
-    name="memory.store",
-    title="Memory creation Tool",
-    description="Stores a memory to enhance future conversations by providing relevant contextual information."
+    name="note_take",
+    title="Note Capture Tool",
+    description=textwrap.dedent("""
+        Takes a user-instructed note and saves it as long-term memory.
+
+        Use this tool only when the user explicitly asks to take a note, remember something,
+        or store information for future context. Extract the meaningful content, clean it
+        lightly for clarity, and provide a plain-text string that preserves all essential
+        details.
+
+        The tool returns:
+          • structured_content: a JSON object containing the stored note content and timestamp
+          • content: a concise, human-readable summary of what was saved
+    """)
 )
-def memory_store(
-    content: Annotated[str, "The content of the memory."],
+def note_take(
+    content: Annotated[str, "The content of the note."],
 ) -> ToolResult:
     """
-    Stores a memory to enhance future conversations by providing relevant contextual information.
-    :param content: The content of the memory to be remembered and recalled later to provide context
-    :return: A representation of the stored memory, suitable for both machine and human readability.
+    This tool should be invoked when the user explicitly asks to take a note, jot something down,
+    or save information for later. The input should be a clean, plain-text representation of
+    the note while preserving all essential details.
+    :param content: The text of the note to be stored.
+    :return: The created note, both in machine and human-readable formats
     """
 
-    # compose memory to be persisted
-    memory = Memory(
+    # compose note to be persisted
+    note = Note(
         content=content,
         created=datetime.datetime.now()
     )
@@ -91,38 +104,52 @@ def memory_store(
                 "key": uuid.uuid4().hex,
                 "data": {"float32": embeddings},
                 "metadata": {
-                    "content": memory.content,
-                    "created": memory.created.isoformat(),
+                    "content": note.content,
+                    "created": note.created.isoformat(),
                 }
             }
         ]
     )
 
-    # yield the memory
+    # yield the note
     return ToolResult(
-        structured_content=asdict(memory),
-        content=memory.content,
+        structured_content=asdict(note),
+        content=note.content,
     )
 
 @mcp.tool(
-    name="memory.recall",
-    title="Memory recollection tool",
-    description="Recalls memory to be used as relevant contextual information, based on provided context."
+    name="note_find",
+    title="Note Find Tool",
+    description=textwrap.dedent("""
+        Finds and returns previously saved notes that are relevant to the user's query.
+
+        Use this tool whenever the user asks to recall, find, look up, or search for
+        information that may have been stored earlier. The user will provide a
+        context-rich hint (keywords, topics, or phrases), and the tool will perform a
+        semantic search to locate the most relevant notes.
+
+        The tool returns:
+          • structured_content: a JSON object containing the matching notes with their
+            content, timestamp, and relevance information
+          • content: a readable summary listing the retrieved notes
+    """)
 )
-def memory_recall(
-    context: Annotated[str, "Contextual information that relates to the memory to be recalled"],
+def note_find(
+    context: Annotated[str, "Contextual information that relates to the note to be found"],
 ) -> ToolResult:
     """
-    Recalls memory to be used as relevant contextual information, based on provided context
-    :param context: Context-full hint that helps recalling the memory
-    :return: The most relevant memory, both in machine and human-readable formats
+    Use this tool when the user asks to recall, find, or look up notes based on keywords, topics,
+    or other contextual hints. The tool performs a semantic search over all saved notes and returns
+    the most relevant matches.
+    :param context: A context-rich query or hint used to locate relevant notes.
+    :return: The most relevant notes, both in machine and human-readable formats
     """
 
-    # query vector index for memories
+    # query vector index for notes
     embeddings = _get_embeddings(context)
     response = s3_vectors.query_vectors(
         vectorBucketName=VECTOR_BUCKET_NAME,
-        indexName="memories",
+        indexName=VECTOR_INDEX_NAME,
         queryVector={"float32": embeddings},
         returnMetadata=True,
         returnDistance=True,
@@ -136,120 +163,25 @@ def memory_recall(
             content=f"I have shared nothing about {context}",
         )
 
-    # reconstruct relevant memories
-    memories = [
-        Memory(
-            content=memory["metadata"]["content"],
-            distance=memory["distance"],
+    # reconstruct relevant notes
+    notes = [
+        Note(
+            content=note["metadata"]["content"],
+            distance=note["distance"],
             created=datetime.datetime.fromisoformat(
-                memory["metadata"]["created"]
+                note["metadata"]["created"]
             )
         )
-        for memory
+        for note
         in response["vectors"]
     ]
 
     # sort by relevance, serve in both machine and human-readable formats
-    memories = sorted(memories, key=lambda memory: memory.distance)
+    notes = sorted(notes, key=lambda note: note.distance)
     return ToolResult(
-        structured_content={"memories": [asdict(memory) for memory in memories]},
-        content="\n".join(f"- {memory.content}" for memory in memories)
+        structured_content={"notes": [asdict(note) for note in notes]},
+        content="\n".join(f"- {note.content}" for note in notes)
     )
-
-# -------------------------
-# Define MCP prompts
-# -------------------------
-
-@mcp.prompt(
-    name="memory.decide",
-    description="Generates prompts to help the LLM decide whether to store a new memory or recall an existing one based on context."
-)
-def memory_decide() -> list[PromptMessage]:
-    """
-    Generates prompts to guide the LLM in deciding how to handle memory.s
-    :return: A list of PromptMessage objects to assist the LLM's memory decision.
-    """
-    return [
-        PromptMessage(
-            role="user",
-            content=TextContent(
-                type="text",
-                text=textwrap.dedent("""                     
-                    You are the MCP server responsible for managing the LLM's memory. The user has consented to allow 
-                    you to store, recall, and use all personal information they provide. Only notable, user-specific,
-                    non-generic information should be stored. General knowledge, widely-known facts, or trivial 
-                    information must not be stored, nor should they trigger recall.
-
-                    Your task is to analyze each incoming user message and determine whether any part of it:
-                    
-                    1. Should be **stored** in long-term memory for future conversations, or  
-                    2. Requires **recalling** existing memory to answer the request accurately.
-                    
-                    **Rules for Memory Management**
-                    
-                    1. Only store **user-specific, notable, or non-generic information** that enriches context for future conversations.  
-                    2. Do **not** store general knowledge, trivia, or information that is widely known.  
-                    3. Store information as **impersonal facts in passive voice**, without first-person references.  
-                    4. Rephrase information for clarity and efficient retrieval.  
-                    5. If notable information is identified, generate a `memory.store` tool call in plain text.  
-                    6. Generate a `memory.recall` tool call **only if the message might involve user-specific, personal, or non-generic information**. Do not recall for general knowledge or trivial queries. Provide broad, generic context to capture all relevant information, even if the value is unknown.  
-                    7. Both `content` and `context` must be **plain text strings**, capturing the key concepts of the information.  
-                    8.  **Always return a strictly parseable JSON array**, even if there is only one tool call. Do not include quotes, backticks, markdown, explanations, or any text outside the array.  
-                    9. If the message contains only general knowledge, trivia, or non-user-specific information, return exactly an empty array: []. Never add any text before or after the array. Only output a JSON array. Do not include any explanations, commentary, notes, or text outside the array. 
-                    
-                    **JSON Object Structure**
-                    
-                    For each memory need, output one object:
-                    
-                    {
-                        "tool": "<tool name>",
-                        "arguments": {
-                            "content" or "context": "<plain text string>"
-                        }
-                    }
-                    
-                    **Available MCP Tools**
-                    
-                    1. `memory.store`  
-                       - Stores information that enriches future conversations.  
-                       - Examples:
-                         [
-                             {
-                                 "tool": "memory.store",
-                                 "arguments": {
-                                     "content": "Exploring wild Nordic nature and backpacking are highly favored activities. Trips involving hiking and camping in remote Nordic landscapes are preferred."
-                                 }
-                             },
-                             {
-                                 "tool": "memory.store",
-                                 "arguments": {
-                                     "content": "Instrumental music performed on the piano is highly beloved. Keith Jarrett is regarded as the favorite composer."
-                                 }
-                             }                            
-                         ]
-                    
-                    2. `memory.recall`  
-                       - Retrieves previously stored contextual memory based on the essential concepts of the user’s message.  
-                       - Examples:
-                         [
-                             {
-                                 "tool": "memory.recall",
-                                 "arguments": {
-                                     "context": "Traveling to Asia is imminent. Dining opportunities during the visit are highly anticipated."
-                                 }
-                             },
-                             {
-                                 "tool": "memory.recall",
-                                 "arguments": {
-                                     "context": "Attendance at the upcoming music festival in Brno is highly anticipated. The event is looked forward to with excitement."
-                                 }
-                             }                             
-                         ]
-                """
-                )
-            )
-        )
-    ]
 
 # -------------------------
 # Define helper methods

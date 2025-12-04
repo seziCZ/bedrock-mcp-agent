@@ -1,15 +1,18 @@
 # Serverless Bedrock Agent with MCP Context
 
-This project demonstrates a fully serverless architecture for a Bedrock-based LLM agent, where MCP servers handle the agent’s memory and context management. The architecture allows the agent to dynamically decide whether to store new information or recall relevant past memories to generate context-aware responses. It leverages AWS Bedrock models for language understanding and embeddings, S3 Vector tables for storing and querying semantic memory, and containerized AWS Lambda functions to host both the agent and MCP servers. The entire infrastructure is orchestrated using Python CDK.
+This project demonstrates a fully serverless architecture for a Bedrock-powered LLM agent, where an MCP server manages note creation, retrieval, and semantic search using AWS S3 Vectors.
+
+The agent uses AWS Bedrock for language reasoning and LangChain for agent orchestration, tool routing, and multi-step decision-making. Both the agent and MCP server run entirely on AWS Lambda, with infrastructure provisioned via the Python AWS CDK.
 
 ---
 
 ## Key Concept
 
-- **Serverless Agent**: Lambda-based agent queries Bedrock LLMs for responses.  
-- **Lambda-Hosted MCP**: MCP server runs entirely on AWS Lambda, managing long-term memory and embeddings. No dedicated servers required.  
-- **S3 Vector Store**: Persists embeddings for semantic memory and context-aware responses.  
-- **Authentication**: Both Agent and Server API Gateway endpoints are secured via **API key** in the `X-API-Key` header.  
+- **Serverless Agent**: Lambda-hosted agent that interacts with AWS Bedrock LLMs to answer questions and invoke MCP tools.
+- **LangChain Orchestration**: LangChain manages agent reasoning, decides when to call MCP tools, structures tool invocation arguments, and constructs multi-step interactions automatically.
+- **Lambda-Hosted MCP**: MCP server running fully on AWS Lambda, responsible for storing and retrieving user notes.
+- **Persistent Note Store**: Notes are represented as vector embeddings and stored in an S3 Vector Index
+- **Authentication**: Both Agent and MCP Server API Gateway endpoints are secured via an API key in the X-API-Key header.  
 
 ---
 
@@ -20,27 +23,29 @@ This project demonstrates a fully serverless architecture for a Bedrock-based LL
       └─────┬──────┘
             │
             ▼
-    ┌───────────────┐
-    │  Agent Lambda │
-    │  (Bedrock)    │
-    └─────┬─────────┘
+    ┌──────────────────┐
+    │  Agent Lambda    │
+    │ (Bedrock +       │
+    │   LangChain)     │
+    └─────┬────────────┘
           │ invokes tools
           ▼
-    ┌───────────────┐
-    │ Server Lambda │
-    │  (Memory MCP) │
-    └─────┬─────────┘
+    ┌──────────────────┐
+    │ Server Lambda    │
+    │  (Notes MCP)     │
+    └─────┬────────────┘
           │ stores/queries
           ▼
-     ┌───────────┐
-     │ S3 Vectors│
-     └───────────┘
+     ┌───────────────┐
+     │  S3 Vectors   │
+     └───────────────┘
+
 
 
 **Flow:**
 
-- **Agent Lambda**: Receives API requests, constructs prompts, and interacts with the MCP server to decide on memory usage.
-- **Server Lambda**: Handles `memory.store` and `memory.recall` tools, backed by an S3 Vector store for embeddings.
+- **Agent Lambda**: Receives API requests, initializes a LangChain-orchestrated Bedrock agent, and invokes MCP tools as needed to create or search notes.
+- **Server Lambda**: Implements the MCP note-management tools, embedding and storing notes in an S3 Vectors index and performing vector similarity search for note retrieval.
 
 ---
 
@@ -58,6 +63,9 @@ aws apigateway get-api-keys --include-values
 - [AWS Bedrock](https://aws.amazon.com/bedrock/) – Foundation models for language understanding  
 - [AWS S3 Vectors](https://aws.amazon.com/s3/features/vectors/) – Object storage for vector embeddings  
 - [AWS CDK](https://aws.amazon.com/cdk/) – Infrastructure as code  
-- [API Gateway](https://aws.amazon.com/api-gateway/) – Secure API endpoints 
-- [Serverless MCP](https://github.com/awslabs/mcp/tree/main/src/mcp-lambda-handler) - Inspiration for Lambda MCP server implementation
-- [Serverless MCP Options](https://github.com/awslabs/run-model-context-protocol-servers-with-aws-lambda) - Options regarding MCP serverless deployments
+- [API Gateway](https://aws.amazon.com/api-gateway/) – Secure API endpoints
+- [LangChain](https://python.langchain.com/) – Agent orchestration, tool routing, and reasoning framework  
+- [langchain-aws](https://python.langchain.com/docs/integrations/providers/aws) – Bedrock model bindings and AWS-native LangChain integrations  
+- [langchain-mcp-adapters](https://github.com/ModelContextProtocol/langchain-mcp-adapters) – MCP adapter layer enabling LangChain agents to consume MCP tools
+- [Serverless MCP](https://github.com/awslabs/mcp/tree/main/src/mcp-lambda-handler) – Inspiration for Lambda-based MCP server implementation  
+- [Serverless MCP Options](https://github.com/awslabs/run-model-context-protocol-servers-with-aws-lambda) – Options and patterns for running MCP servers in serverless environments  

@@ -74,7 +74,7 @@ async def handle(event, context) -> dict[str, Any]:
     prompts = {
         "messages": [
             HumanMessage(
-                content="Did I take any note regarding a doctors appointment?"
+                content=api_event.body
             )
         ]
     }

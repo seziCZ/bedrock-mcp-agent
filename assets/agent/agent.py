@@ -8,7 +8,7 @@ from langchain.agents import create_agent
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import HumanMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_mcp_adapters.sessions import Connection, StreamableHttpConnection
+from langchain_mcp_adapters.sessions import StreamableHttpConnection
 
 # -------------------------
 # Configuration
@@ -68,14 +68,14 @@ async def handle(event, context) -> dict[str, Any]:
 
     # create a LangChain agent powered by Bedrock and MCP tools
     # TODO: consider persisting conversation history using the ledger
-    graph = create_agent(
+    agent = create_agent(
         model=llm,
         tools=mcp_tools,
         debug=True
     )
 
     # invoke the agent with the user provided input
-    responses = await graph.ainvoke({
+    responses = await agent.ainvoke({
         "messages": [
             HumanMessage(
                 content=api_event.body
@@ -101,7 +101,7 @@ def _get_mcp_client(x_api_key: str) -> MultiServerMCPClient:
         "url": MCP_ENDPOINT,
         "headers": {
             API_KEY_HEADER: x_api_key,
-        },
+        }
     }
 
     return MultiServerMCPClient({

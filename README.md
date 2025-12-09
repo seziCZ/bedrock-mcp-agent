@@ -2,50 +2,81 @@
 
 This project demonstrates a fully serverless architecture for a Bedrock-powered LLM agent, where an MCP server manages note creation, retrieval, and semantic search using AWS S3 Vectors.
 
-The agent uses AWS Bedrock for language reasoning and LangChain for agent orchestration, tool routing, and multi-step decision-making. Both the agent and MCP server run entirely on AWS Lambda, with infrastructure provisioned via the Python AWS CDK.
+The agent uses AWS Bedrock for language reasoning and LangChain for agent orchestration, tool routing, and multi-step decision-making. The same agent container can be executed in two different hosting environments:
+
+1. **API Gateway → Lambda** (direct invocation of the Dockerized agent)
+2. **Bedrock AgentCore Runtime** (Bedrock runs the agent container itself)
+
+Both the agent and the MCP server are provisioned using the Python AWS CDK.
 
 ---
 
 ## Key Concept
 
-- **Serverless Agent**: Lambda-hosted agent that interacts with AWS Bedrock LLMs to answer questions and invoke MCP tools.
-- **LangChain Orchestration**: LangChain manages agent reasoning, decides when to call MCP tools, structures tool invocation arguments, and constructs multi-step interactions automatically.
-- **Lambda-Hosted MCP**: MCP server running fully on AWS Lambda, responsible for storing and retrieving user notes.
-- **Persistent Note Store**: Notes are represented as vector embeddings and stored in an S3 Vector Index
-- **Authentication**: Both Agent and MCP Server API Gateway endpoints are secured via an API key in the X-API-Key header.  
+- **Serverless Agent (API Gateway Path)**:  
+  A Dockerized LangChain agent deployed to AWS Lambda and invoked through API Gateway.  
+  This path uses an API key (`X-API-Key`) for authentication.
+
+- **AgentCore Runtime (Direct Bedrock Execution)**:  
+  Bedrock AgentCore hosts and runs the *same agent container directly*, without a Lambda wrapper.  
+  AgentCore handles planning, tool routing, validation, retries, and multi-step reasoning.  
+  Authentication uses **IAM**, not API keys.
+
+- **LangChain Orchestration**:  
+  LangChain manages agent reasoning, decides when to call MCP tools, structures tool invocation arguments, and supports multi-step flows across both hosting environments.
+
+- **Lambda-Hosted MCP**:  
+  MCP server running fully on AWS Lambda, responsible for storing and retrieving user notes.
+
+- **Persistent Note Store**:  
+  Notes are represented as vector embeddings and stored in an S3 Vector Index.
+
+- **Authentication**:  
+  - **API Gateway route** → `X-API-Key`  
+  - **AgentCore route** → IAM-based authorization
 
 ---
 
 ## Architecture
-    
-      ┌────────────┐
-      │  User/API  │
-      └─────┬──────┘
-            │
-            ▼
-    ┌──────────────────┐
-    │  Agent Lambda    │
-    │ (Bedrock +       │
-    │   LangChain)     │
-    └─────┬────────────┘
-          │ invokes tools
-          ▼
-    ┌──────────────────┐
-    │ Server Lambda    │
-    │  (Notes MCP)     │
-    └─────┬────────────┘
-          │ stores/queries
-          ▼
-     ┌───────────────┐
-     │  S3 Vectors   │
-     └───────────────┘
 
+                    ┌──────────────┐
+                    │    User/API  │
+                    └──────┬───────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+              ▼                         ▼
+    ┌──────────────────┐     ┌──────────────────────┐
+    │ API Gateway      │     │  AgentCore Runtime   │
+    │  (X-API-Key)     │     │   (IAM Auth)         │
+    └──────┬───────────┘     └──────────┬───────────┘
+           │                            │
+           ▼                            ▼
+    ┌──────────────────┐         ┌──────────────────┐
+    │ Agent Container  │         │ Agent Container  │
+    │  (via Lambda)    │         │ (via AgentCore)  │
+    └──────┬───────────┘         └──────┬───────────┘
+           │ invokes tools              │ invokes tools
+           └──────────────┬─────────────┘
+                          ▼
+                 ┌──────────────────┐
+                 │ Server Lambda    │
+                 │   (Notes MCP)    │
+                 └──────┬───────────┘
+                        │ stores/queries
+                        ▼
+                 ┌───────────────┐
+                 │  S3 Vectors   │
+                 └───────────────┘
 
 
 **Flow:**
 
-- **Agent Lambda**: Receives API requests, initializes a LangChain-orchestrated Bedrock agent, and invokes MCP tools as needed to create or search notes.
-- **Server Lambda**: Implements the MCP note-management tools, embedding and storing notes in an S3 Vectors index and performing vector similarity search for note retrieval.
+- **API Gateway Path**  
+  User → API Gateway → Lambda → LangChain Agent (Docker) → MCP Server → S3 Vectors
+
+- **AgentCore Path**  
+  User → AgentCore (direct container execution) → MCP Server → S3 Vectors
 
 ---
 
@@ -54,6 +85,7 @@ The agent uses AWS Bedrock for language reasoning and LangChain for agent orches
 ```bash
 aws s3vectors list-vectors --vector-bucket-name <bucket> --index-name memories --return-metadata
 aws s3vectors delete-vectors --vector-bucket-name <bucket> --index-name my-index --keys <key>
+aws bedrock-agentcore invoke-agent-runtime --agent-runtime-arn <runtime-arn> --payload <base64-json> <output-file>
 aws apigateway get-api-keys --include-values
 ```
 

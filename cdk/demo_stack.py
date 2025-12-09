@@ -1,8 +1,9 @@
 from aws_cdk import Stack, aws_iam
 from aws_cdk.aws_apigateway import ApiKey
+from aws_cdk.aws_secretsmanager import Secret, SecretStringGenerator
 from constructs import Construct
 
-from cdk.constructs import S3VectorBucket, RestApi
+from cdk.constructs import S3VectorBucket, RestApi, AgentRuntime
 
 
 class DemoStack(Stack):
@@ -36,10 +37,24 @@ class DemoStack(Stack):
             index_name="memories"
         )
 
+        # ------------------------------------------------------------------
+        # Custom Lambda based deployment
+        # ------------------------------------------------------------------
+
         # create API key
+        api_secret = Secret(
+            scope=self,
+            id="ApiSecret",
+            generate_secret_string=SecretStringGenerator(
+                exclude_punctuation=True,
+                password_length=32
+            )
+        )
+
         api_key = ApiKey(
             scope=self,
             id="ApiKey",
+            value=api_secret.secret_value.unsafe_unwrap()
         )
 
         # create MCP server API
@@ -49,10 +64,9 @@ class DemoStack(Stack):
             directory="assets/server",
             api_key=api_key,
             env={
-                "llm_model": self.LLM_MODEL,
-                "embedding_model": self.EMBEDDING_MODEL,
-                "vector_bucket_name": memory_bucket.bucket.vector_bucket_name,
-                "vector_index_name": memory_bucket.index.index_name
+                "EMBEDDING_MODEL": self.EMBEDDING_MODEL,
+                "VECTOR_BUCKET_NAME": memory_bucket.bucket.vector_bucket_name,
+                "VECTOR_INDEX_NAME": memory_bucket.index.index_name
             }
         )
 
@@ -63,8 +77,9 @@ class DemoStack(Stack):
             directory="assets/agent",
             api_key=api_key,
             env={
-                "llm_model": self.LLM_MODEL,
-                "mcp_endpoint": server_api.api.url
+                "LLM_MODEL": self.LLM_MODEL,
+                "MCP_ENDPOINTS": server_api.api.url,
+                "API_KEY": api_secret.secret_value.unsafe_unwrap(),
             }
         )
 
@@ -81,3 +96,21 @@ class DemoStack(Stack):
 
         server_api.function.add_to_role_policy(policies)
         agent_api.function.add_to_role_policy(policies)
+
+
+        # ------------------------------------------------------------------
+        # AWS Bedrock AgentCore Runtime deployment
+        # ------------------------------------------------------------------
+
+        agent_runtime = AgentRuntime(
+            scope=self,
+            id="AgentCore",
+            directory="assets/agent",
+            env={
+                "LLM_MODEL": self.LLM_MODEL,
+                "MCP_ENDPOINTS": server_api.api.url,
+                "API_KEY": api_secret.secret_value.unsafe_unwrap(),
+            }
+        )
+
+        agent_runtime.runtime.add_to_role_policy(policies)

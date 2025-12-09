@@ -1,109 +1,81 @@
-import asyncio
-import logging
-import os
-from typing import Any
+from typing import List, Optional, Dict
+from urllib.parse import urlparse
 
-from aws_lambda_powertools.utilities.data_classes import APIGatewayProxyEventV2
 from langchain.agents import create_agent
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import HumanMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_mcp_adapters.sessions import StreamableHttpConnection
 
-# -------------------------
-# Configuration
-# -------------------------
 
-API_KEY_HEADER = os.environ.get("api_key_header", "X-API-Key")
-MCP_ENDPOINT = os.environ.get("mcp_endpoint", "https://localhost:8080")
-
-LLM_MODEL = os.environ.get("llm_model", "global.amazon.nova-2-lite-v1:0")
-LLM_MODEL_TEMPERATURE = os.environ.get("llm_model_temperature", 0.2)
-LLM_MODEL_TOKENS = os.environ.get("llm_model_max_tokens", 512)
-
-# -------------------------
-# Initialize AWS Bedrock client
-# -------------------------
-
-llm = ChatBedrockConverse(
-    model=LLM_MODEL,
-    temperature=LLM_MODEL_TEMPERATURE,
-    max_tokens=LLM_MODEL_TOKENS
-)
-
-# -----------------------
-# Lambda handler
-# -----------------------
-
-def handler(event, context) -> dict[str, Any]:
+class Agent:
     """
-    Synchronous AWS Lambda entrypoint for the Bedrock-powered note-taking agent. Wraps the asynchronous
-    `handle` function so the Lambda runtime can invoke it without native asyncio support.
-    @param event: The AWS Lambda event payload, an API Gateway request
-    @param context: AWS Lambda runtime context providing metadata
-    @return: The response produced by the asynchronous handler, formatted as a dictionary
-    """
-    logging.info("Agent triggered for %s", event)
-    return asyncio.run(handle(event, context))
-
-async def handle(event, context) -> dict[str, Any]:
-    """
-     Asynchronous handler that orchestrates the full agent workflow:
-      1. Parses the incoming API Gateway event.
-      2. Creates an MCP client authenticated with the caller's API key.
-      3. Retrieves the MCP-exposed tools and injects them into a Bedrock-backed agent.
-      4. Invokes the agent with the user's question and returns the final model reply.
-    @param event: The AWS Lambda event payload, an API Gateway request
-    @param context: AWS Lambda runtime context providing metadata
-    @return: The response produced by the asynchronous handler, formatted as a dictionary
+    Lightweight wrapper around a LangChain agent that integrates AWS Bedrock as the LLM
+    and discovers tools from one or more MCP servers. It provides a simple `invoke`
+    method for executing natural-language prompts using the configured model and tools.
     """
 
-    # extract caller's API key from headers
-    api_event = APIGatewayProxyEventV2(event)
-    api_key = api_event.headers.get(API_KEY_HEADER)
+    def __init__(
+            self,
+            mcp_endpoints: List[str],
+            mcp_headers: Optional[Dict[str, str]] = None,
+            llm_model: str = "global.amazon.nova-2-lite-v1:0",
+            llm_model_temperature: float = 0.2,
+            llm_model_max_tokens: int = 512,
+    ) -> None:
+        """
+        Constructor.
+        :param mcp_endpoints: List of MCP endpoint URLs to connect to.
+        :param mcp_headers: Optional HTTP headers applied to all MCP requests (e.g. auth).
+        :param llm_model: AWS Bedrock model identifier.
+        :param llm_model_temperature: Sampling temperature for the LLM.
+        :param llm_model_max_tokens: Maximum number of tokens to generate in a response.
+        """
 
-    # discover MCP tools exposed by the configured MCP server
-    mcp_client = _get_mcp_client(api_key)
-    mcp_tools = await mcp_client.get_tools()
+        # initialize Bedrock client
+        self.llm = ChatBedrockConverse(
+            model=llm_model,
+            temperature=llm_model_temperature,
+            max_tokens=llm_model_max_tokens
+        )
 
-    # create a LangChain agent powered by Bedrock and MCP tools
-    # TODO: consider persisting conversation history using the ledger
-    agent = create_agent(
-        model=llm,
-        tools=mcp_tools,
-        debug=True
-    )
+        # initialize MCP client
+        # see https://pypi.org/project/langchain-mcp-adapters/
+        self.mcp = MultiServerMCPClient({
+            urlparse(mcp_endpoint).hostname: {
+                "transport": "streamable_http",
+                "headers": mcp_headers or {},
+                "url": mcp_endpoint,
+            }
+            for mcp_endpoint
+            in mcp_endpoints
+        })
 
-    # invoke the agent with the user provided input
-    responses = await agent.ainvoke({
-        "messages": [
-            HumanMessage(
-                content=api_event.body
-            )
-        ]
-    })
 
-    # return the last message as the HTTP response body.
-    return {
-        "statusCode": 200,
-        "body": responses["messages"][-1].content
-    }
+    async def invoke(self, prompt: str) -> str:
+        """
+        Executes the provided prompt against a LangChain agent backed by AWS Bedrock and MCP tools.
+        # TODO: Persist conversation history using a ledger or vector store
+        :param prompt: User-defined natural language prompt to be processed by the agent.
+        :return: Textual response generated by the agent.
+        """
 
-def _get_mcp_client(x_api_key: str) -> MultiServerMCPClient:
-    """
-    Yields and configures a MultiServerMCPClient, authenticated using the given API key.
-    See https://pypi.org/project/langchain-mcp-adapters/ for technical details
-    :param x_api_key: The API key to be used when authetnticating against the MCP server
-    :return: An initialized MultiServerMCPClient instance.
-    """
-    connection: StreamableHttpConnection = {
-        "transport": "streamable_http",
-        "url": MCP_ENDPOINT,
-        "headers": {
-            API_KEY_HEADER: x_api_key,
-        }
-    }
+        # initialize agent, through LangChain
+        tools = await self.mcp.get_tools()
+        agent = create_agent(
+            model=self.llm,
+            tools=tools,
+            debug=True
+        )
 
-    return MultiServerMCPClient({
-        "mcp_server": connection
-    })
+        # invoke the agent with the user provided input
+        responses = await agent.ainvoke({ # type: ignore[arg-type]
+            "messages": [
+                HumanMessage(
+                    content=prompt
+                )
+            ]
+        })
+
+        # return the most recent message content
+        last_message = responses["messages"][-1]
+        return getattr(last_message, "content", "")

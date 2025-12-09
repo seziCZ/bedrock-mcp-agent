@@ -14,24 +14,30 @@ from fastmcp.tools.tool import ToolResult
 # Configuration
 # -------------------------
 
-SERVERLESS = os.environ.get("serverless_deployment", True)
-EMBEDDING_MODEL = os.environ.get("embedding_model", "amazon.titan-embed-text-v2:0")
+DEPLOYMENT_MODE = os.environ.get("DEPLOYMENT_MODE", "lambda")
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0")
 
-VECTOR_BUCKET_NAME = os.environ.get("vector_bucket_name", "test-s3-vector-bucket")
-VECTOR_INDEX_NAME = os.environ.get("vector_index_name", "memories")
+VECTOR_BUCKET_NAME = os.environ.get("VECTOR_BUCKET_NAME", "test-s3-vector-bucket")
+VECTOR_INDEX_NAME = os.environ.get("VECTOR_INDEX_NAME", "memories")
 
 # -------------------------
 # Initialize MCP server
 # -------------------------
 
 mcp = None
-if SERVERLESS:
+if DEPLOYMENT_MODE == "lambda":
     from mcp_server.mcp_handler import MCPLambdaHandler
     mcp = MCPLambdaHandler("AWS Lambda MCP Server")
 
 else:
     from fastmcp import FastMCP
-    mcp = FastMCP("FastMCP Server")
+    mcp = FastMCP(
+        name="FastMCP Server",
+        host="0.0.0.0",
+        port=8000,
+        stateless_http=True,
+        streamable_http_path="/mcp"
+    )
 
 # -------------------------
 # Define MCP model entities
@@ -161,7 +167,7 @@ def note_find(
     if not response["vectors"]:
         return ToolResult(
             structured_content=None,
-            content=f"I have shared nothing about {context}",
+            content=f"No '{context}' relevant notes available.",
         )
 
     # reconstruct relevant notes
@@ -226,7 +232,7 @@ def handler(event, context):
 # -------------------------
 # Run FastMCP server
 # -------------------------
-if __name__ == "__main__" and not SERVERLESS:
+if __name__ == "__main__" and isinstance(mcp, FastMCP):
     """
     Entry point for running the FastMCP server. Starts `mcp.run()` to handle stdio or MCP clients. 
     Only used for FastMCP server deployments; serverless implementations do not spawn a long-running process.

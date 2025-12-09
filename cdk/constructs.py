@@ -1,9 +1,14 @@
 import hashlib
-from typing import Dict
+from typing import Dict, Optional
 
 import cdk_s3_vectors as s3_vectors
-from aws_cdk import Duration, aws_lambda, aws_apigateway
+from aws_cdk import Duration, aws_lambda, aws_apigateway, CfnOutput
+from aws_cdk import (
+    aws_ecr_assets as ecr_assets,
+)
 from aws_cdk.aws_apigateway import ApiKey, MethodOptions
+from aws_cdk.aws_bedrock_agentcore_alpha import Runtime, AgentRuntimeArtifact, \
+    RuntimeAuthorizerConfiguration
 from constructs import Construct
 
 
@@ -21,6 +26,7 @@ class S3VectorBucket(Construct):
         index_name: str,
     ) -> None:
         """
+        Constructor.
         :param scope: The parent construct.
         :param id: The scoped construct ID.
         :param bucket_name: The base name for the S3 bucket.
@@ -62,15 +68,18 @@ class RestApi(Construct):
         self,
         scope: Construct,
         id: str,
-        directory: str,
         api_key: ApiKey,
-        env: Dict[str, str] | None = None,
+        directory: str,
+        file: str = "serverless.dockerfile",
+        env: Optional[Dict[str, str]] = None
     ) -> None:
         """
+        Constructor.
         :param scope: The parent construct.
         :param id: The scoped construct ID.
-        :param directory: The directory containing the Docker image asset.
         :param api_key: An ApiKey construct that provides the API key used for authentication.
+        :param directory: The directory containing the Docker image asset.
+        :param file: Name of the Dockerfile within ``directory`` to use when building the container image.
         :param env: Optional environment variables for the Lambda function.
         """
         super().__init__(scope, id)
@@ -81,7 +90,8 @@ class RestApi(Construct):
             id=f"{id}Lambda",
             retry_attempts=0,
             code=aws_lambda.DockerImageCode.from_image_asset(
-                directory=directory
+                directory=directory,
+                file=file,
             ),
             memory_size=512,
             timeout=Duration.seconds(30),
@@ -108,4 +118,69 @@ class RestApi(Construct):
         self.plan.add_api_key(api_key)
         self.plan.add_api_stage(
             stage=self.api.deployment_stage
+        )
+
+
+class AgentRuntime(Construct):
+    """
+    Deploys a LangChain-based agent as a containerized AgentCore Runtime.
+    This construct packages a Dockerized agent implementation (typically a
+    LangChain application) and hosts it in Amazon Bedrock AgentCore. It:
+
+      • Builds the Docker image from a local directory into Amazon ECR.
+      • Creates an AgentCore Runtime that executes the container.
+      • Applies IAM-based authorization for invoking the runtime.
+      • Passes optional environment variables into the running agent.
+
+    :param scope: The parent construct.
+    :param id: The scoped construct ID.
+    :param directory: The directory containing the Docker image asset.
+    :param file: Name of the Dockerfile within ``directory`` to use when building the container image.
+    :param env: Optional environment variables passed into the MCP container.
+    """
+
+    def __init__(
+        self,
+        scope: Construct,
+        id: str,
+        directory: str,
+        file: str = "agentcore.dockerfile",
+        env: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """
+        Constructor.
+        :param scope: The parent construct.
+        :param id: The scoped construct ID.
+        :param directory: Path containing `bedrock.dockerfile` used to build the container image.
+        :param env: Optional environment variables for the MCP server container.
+        """
+        super().__init__(scope, id)
+
+        # build the Docker image into ECR
+        ecr_image = ecr_assets.DockerImageAsset(
+            scope=self,
+            id="Image",
+            directory=directory,
+            file=file,
+            platform=ecr_assets.Platform.LINUX_ARM64
+        )
+
+        # compose runtime
+        self.runtime = Runtime(
+            scope=self,
+            id="Runtime",
+            runtime_name=f"{id}Runtime",
+            environment_variables=env,
+            authorizer_configuration=RuntimeAuthorizerConfiguration.using_iam(),
+            agent_runtime_artifact=AgentRuntimeArtifact.from_ecr_repository(
+                repository=ecr_image.repository,
+                tag=ecr_image.image_tag
+            ),
+        )
+
+        CfnOutput(
+            scope=self,
+            id="RuntimeArn",
+            description="AgentCore Runtime ARN for CLI invocations",
+            value=self.runtime.agent_runtime_arn
         )

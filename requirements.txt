@@ -5,7 +5,9 @@ aws-lambda-powertools==3.22.0
 cdk-s3-vectors==0.2.2
 boto3==1.40.59
 fastmcp==2.13.0.2
-mcp==1.19.0
+mcp==1.23.0
 langchain==1.1.0
 langchain-aws==1.1.0
 langchain-mcp-adapters==0.1.14
+bedrock_agentcore==1.1.1
+aws-cdk.aws-bedrock-agentcore-alpha==2.232.1a0
